@@ -1,0 +1,8 @@
+name: orb-breakout-rvol-gated
+thesis: "ORB breakouts only on high-conviction days (RVOL 2-3x, price>=$10) survive costs; ungated firehose does not."
+entry: orb_breakout
+params: {orb_min: 5, stop_R: 1.0, target_R: 1.5, time_stop: 10}
+filters: {rvol_min: 2.0, rvol_max: 3.0, rvol_baseline: 20, price_min: 10.0}
+universe: [SPY, AAPL, MSFT, NVDA, AMD, TSLA]
+costs_bp_side: [0.0, 0.5, 1.0, 2.0]
+gates: {min_n: 30, min_sharpe_1bp: 0.5, min_breakeven_bp: 1.5}

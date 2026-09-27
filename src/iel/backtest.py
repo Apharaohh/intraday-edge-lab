@@ -33,9 +33,13 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
     stop_R = float(params.get("stop_R", 1.0))
     target_R = float(params.get("target_R", 1.5))
     time_stop = int(params.get("time_stop", 10))
+    rvol_min = params.get("rvol_min")
+    rvol_max = params.get("rvol_max")
+    price_min = float(params.get("price_min", 0.0))
+    price_max = float(params.get("price_max", float("inf")))
+    rvol_baseline = int(params.get("rvol_baseline", 20))
 
     starts, ends, day_id = _sessions(idx)
-    start_of = {s: s for s in starts}
     end_of_day = np.zeros(len(df), dtype=bool)
     end_of_day[ends] = True
     day_start_of = np.zeros(len(df), dtype=int)
@@ -53,12 +57,25 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
     else:
         sigma = 0.002
 
+    # RVOL baseline (trailing, no lookahead). Computed only when gate is on.
+    gate_on = rvol_min is not None or rvol_max is not None
+    if gate_on:
+        from .rvol import compute_rvol
+        vols = df["volume"].to_numpy() if "volume" in df.columns else np.ones(len(df))
+        rvol = compute_rvol(vols, day_id, baseline_sessions=rvol_baseline)
+        lo = float(rvol_min) if rvol_min is not None else 0.0
+        hi = float(rvol_max) if rvol_max is not None else float("inf")
+    else:
+        rvol = None
+        lo = hi = None
+    blocked_rvol = 0
+    blocked_price = 0
+
     rows = []
     pos = 0
     entry_px = 0.0
     risk = 0.0
     bars_held = 0
-
     n = len(df)
     day_open = opens[0]
     for i in range(n - 1):
@@ -100,13 +117,22 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
                 sig = 0
             # enter at next open only if next bar is same session
             if sig != 0 and i + 1 < n and day_id[i + 1] == day_id[i]:
-                pos = sig
-                entry_px = opens[i + 1]
-                bar_range = max(highs[i] - lows[i], entry_px * 1e-4)
-                risk = bar_range / entry_px
-                bars_held = 0
+                px_sig = closes[i]
+                if not (price_min <= px_sig <= price_max):
+                    blocked_price += 1
+                elif gate_on and (not np.isfinite(rvol[i]) or not (lo <= rvol[i] <= hi)):
+                    blocked_rvol += 1
+                else:
+                    pos = sig
+                    entry_px = opens[i + 1]
+                    bar_range = max(highs[i] - lows[i], entry_px * 1e-4)
+                    risk = bar_range / entry_px
+                    bars_held = 0
     trades = pd.DataFrame(rows)
     if not trades.empty:
         for bp in C.COST_LADDER_BP:
             trades[f"net_{bp}bp"] = trades["gross"] - trades["sides"] * bp / 1e4
+    trades.attrs["blocked_rvol"] = blocked_rvol
+    trades.attrs["blocked_price"] = blocked_price
+    trades.attrs["rvol_gate"] = f"[{lo},{hi}]" if gate_on else "off"
     return trades
