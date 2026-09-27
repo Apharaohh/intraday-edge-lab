@@ -38,6 +38,9 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
     price_min = float(params.get("price_min", 0.0))
     price_max = float(params.get("price_max", float("inf")))
     rvol_baseline = int(params.get("rvol_baseline", 20))
+    day_rvol_min = params.get("day_rvol_min")
+    day_rvol_max = params.get("day_rvol_max")
+    day_rvol_lookback = int(params.get("day_rvol_lookback", 20))
 
     starts, ends, day_id = _sessions(idx)
     end_of_day = np.zeros(len(df), dtype=bool)
@@ -71,6 +74,25 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
         lo = hi = None
     blocked_rvol = 0
     blocked_price = 0
+    blocked_day = 0
+
+    # Day-level RVOL: prior session's total volume vs trailing median.
+    # Known at the open, so it never penalizes early entries for being early.
+    day_gate_on = day_rvol_min is not None or day_rvol_max is not None
+    if day_gate_on:
+        vols_all = df["volume"].to_numpy() if "volume" in df.columns else np.ones(len(df))
+        sess_vol = np.array([vols_all[(day_id == d)].sum() for d in range(len(starts))])
+        dlo = float(day_rvol_min) if day_rvol_min is not None else 0.0
+        dhi = float(day_rvol_max) if day_rvol_max is not None else float("inf")
+        day_ok = np.zeros(len(starts), dtype=bool)
+        for d in range(1, len(starts)):
+            hist = sess_vol[max(0, d - 1 - day_rvol_lookback):d - 1]
+            hist = hist[hist > 0]
+            if len(hist) < 5 or sess_vol[d - 1] <= 0:
+                continue  # insufficient history -> blocked
+            day_ok[d] = dlo <= sess_vol[d - 1] / float(np.median(hist)) <= dhi
+    else:
+        day_ok = None
 
     rows = []
     pos = 0
@@ -123,6 +145,8 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
                     blocked_price += 1
                 elif gate_on and (not np.isfinite(rvol[i]) or not (lo <= rvol[i] <= hi)):
                     blocked_rvol += 1
+                elif day_gate_on and not day_ok[day_id[i]]:
+                    blocked_day += 1
                 else:
                     pos = sig
                     entry_px = opens[i + 1]
@@ -135,5 +159,7 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
             trades[f"net_{bp}bp"] = trades["gross"] - trades["sides"] * bp / 1e4
     trades.attrs["blocked_rvol"] = blocked_rvol
     trades.attrs["blocked_price"] = blocked_price
+    trades.attrs["blocked_day"] = blocked_day
     trades.attrs["rvol_gate"] = f"[{lo},{hi}]" if gate_on else "off"
+    trades.attrs["day_gate"] = f"[{dlo},{dhi}]" if day_gate_on else "off"
     return trades

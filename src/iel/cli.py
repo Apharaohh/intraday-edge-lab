@@ -44,6 +44,10 @@ def cmd_run(a):
         filt["rvol_max"] = a.rvol_max
     if a.price_min is not None:
         filt["price_min"] = a.price_min
+    if a.day_rvol_min is not None:
+        filt["day_rvol_min"] = a.day_rvol_min
+    if a.day_rvol_max is not None:
+        filt["day_rvol_max"] = a.day_rvol_max
     params = {**base_params, **filt}
     per = {}
     for s in syms:
@@ -58,9 +62,11 @@ def cmd_run(a):
         r["data_source"] = src
         r["bars"] = len(df)
         r["gate"] = tr.attrs.get("rvol_gate", "off")
-        r["blocked"] = (tr.attrs.get("blocked_rvol", 0), tr.attrs.get("blocked_price", 0))
+        r["day_gate"] = tr.attrs.get("day_gate", "off")
+        r["blocked"] = (tr.attrs.get("blocked_rvol", 0), tr.attrs.get("blocked_price", 0),
+                        tr.attrs.get("blocked_day", 0))
         per[s] = r
-        print(f"{s}[{src} n_bars={len(df)} gate={r['gate']} blocked_rvol/price={r['blocked']}]:" 
+        print(f"{s}[{src} n_bars={len(df)} gate={r['gate']}/{r['day_gate']} blocked_rvol/price/day={r['blocked']}]:" 
               f" n={r['n']} t_gross={r.get('t_gross',0):.2f} "
               f"breakeven={r.get('breakeven_bp',0):.2f}bp t_1bp={r.get('t_1.0bp',0):.2f} verdict={r['verdict']}")
         sp = r.get("splits", {})
@@ -87,7 +93,8 @@ def cmd_scan(a):
         print(f"=== {p.name} ===")
         cmd_run(type("A", (), {"hyp": str(p), "symbols": a.symbols, "synthetic": a.synthetic,
                                "source": a.source, "out": None, "rvol_min": a.rvol_min,
-                               "rvol_max": a.rvol_max, "price_min": a.price_min})())
+                               "rvol_max": a.rvol_max, "price_min": a.price_min,
+                               "day_rvol_min": a.day_rvol_min, "day_rvol_max": a.day_rvol_max})())
 
 def main():
     ap = argparse.ArgumentParser(prog="iel")
@@ -99,10 +106,12 @@ def main():
     r.add_argument("--source", default="auto")
     r.add_argument("--rvol-min", type=float, default=None); r.add_argument("--rvol-max", type=float, default=None)
     r.add_argument("--price-min", type=float, default=None)
+    r.add_argument("--day-rvol-min", type=float, default=None); r.add_argument("--day-rvol-max", type=float, default=None)
     s = sub.add_parser("scan"); s.add_argument("--symbols", default=None)
     s.add_argument("--synthetic", action="store_true"); s.add_argument("--source", default="auto")
     s.add_argument("--rvol-min", type=float, default=None); s.add_argument("--rvol-max", type=float, default=None)
     s.add_argument("--price-min", type=float, default=None)
+    s.add_argument("--day-rvol-min", type=float, default=None); s.add_argument("--day-rvol-max", type=float, default=None)
     a = ap.parse_args()
     {"list": cmd_list, "sources": cmd_sources, "run": cmd_run, "scan": cmd_scan}[a.c](a)
 
