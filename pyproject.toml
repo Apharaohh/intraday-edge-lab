@@ -1,0 +1,26 @@
+[project]
+name = "intraday-edge-lab"
+version = "0.1.0"
+description = "Hypothesis-driven intraday edge discovery: pre-registered, cost-laddered, decision-time scored."
+requires-python = ">=3.12"
+dependencies = [
+  "numpy",
+  "pandas",
+  "polars",
+  "pyarrow",
+  "scipy",
+  "pyyaml",
+]
+
+[project.scripts]
+iel = "iel.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

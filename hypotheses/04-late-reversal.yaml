@@ -1,0 +1,7 @@
+name: late-reversal-100bp
+thesis: "Big day-moves mean-revert into close (follows strategy-lab H3 reversal hint, hypothesis-only)."
+entry: late_reversal
+params: {day_bp: 100, entry_bar: 360, stop_R: 1.0, target_R: 1.5, time_stop: 30}
+universe: [SPY, QQQ, IWM]
+costs_bp_side: [0.0, 0.5, 1.0, 2.0]
+gates: {min_n: 30, min_sharpe_1bp: 0.5, min_breakeven_bp: 1.5}

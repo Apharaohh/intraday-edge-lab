@@ -1,0 +1,10 @@
+# Copy to NN-name.yaml, fill in, commit BEFORE running (pre-registration).
+name: template
+thesis: one sentence why this should work
+entry: orb_breakout   # one of orb_breakout|vwap_reclaim|gap_and_go|late_reversal|noise_momentum
+params: {stop_R: 1.0, target_R: 1.5, time_stop: 10}
+universe: [SPY, QQQ, IWM]
+costs_bp_side: [0.0, 0.5, 1.0, 2.0]
+gates: {min_n: 30, min_sharpe_1bp: 0.5, min_breakeven_bp: 1.5}
+splits: [full, post-2024-05, odd-years, even-years]
+data: {source: auto, timeframe: 1min}
