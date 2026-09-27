@@ -82,8 +82,8 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
             if exit_ or last_today:
                 fill = opens[i + 1] if i + 1 < n and not last_today else px
                 ret = (fill / entry_px - 1) * pos
-                rows.append({"idx": i, "side": pos, "gross": ret, "sides": 2.0,
-                             "exit": exit_ or "eod", "held": bars_held})
+                rows.append({"idx": i, "day": str(idx[i].date()), "side": pos, "gross": ret,
+                             "sides": 2.0, "exit": exit_ or "eod", "held": bars_held})
                 pos, bars_held = 0, 0
         if pos == 0:
             if entry == "noise_momentum":

@@ -38,6 +38,13 @@ def cmd_run(a):
         per[s] = r
         print(f"{s}[{src} n_bars={len(df)}]: n={r['n']} t_gross={r.get('t_gross',0):.2f} "
               f"breakeven={r.get('breakeven_bp',0):.2f}bp t_1bp={r.get('t_1.0bp',0):.2f} verdict={r['verdict']}")
+        sp = r.get("splits", {})
+        def _f(k):
+            d = sp.get(k)
+            return f"{k}={d['sharpe_1bp']:.2f}(n={d['n']})" if d and d["sharpe_1bp"] is not None else f"{k}=–"
+        if sp:
+            print(f"   splits: {_f('first')} {_f('second')} {_f('odd')} {_f('even')}" +
+                  (f" {_f('postpub')}" if "postpub" in sp else ""))
     if a.out:
         out = pathlib.Path(a.out)
         out.parent.mkdir(parents=True, exist_ok=True)
