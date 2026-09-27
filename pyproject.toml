@@ -10,6 +10,7 @@ dependencies = [
   "pyarrow",
   "scipy",
   "pyyaml",
+  "yfinance",
 ]
 
 [project.scripts]

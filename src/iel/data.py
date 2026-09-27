@@ -1,40 +1,125 @@
-"""Bar loader: auto-detect existing project data, else synthetic fixture.
+"""Bar loader — uses what you already have, free.
 
 Priority:
- 1. ./data/{SYM}_1min.pkl  (strategy-lab Alpaca SIP layout: index=datetime, open/high/low/close/volume/vwap)
- 2. ./data/{SYM}.parquet   (tickforge/schwab-scalper flattened bars)
- 3. synthetic seeded random walk (so harness + tests run with zero data)
+ 1. ./data/{SYM}_1min.pkl   (strategy-lab Alpaca SIP layout)
+ 2. ./data/{SYM}.parquet    (tickforge / schwab-scalper flattened bars)
+ 3. SQLite intraday_bars: ./data/market.db, $QP_DB_PATH, then the
+    daytrading-agents test fixture (5-min, SPY/AAPL/MSFT/NVDA/AMD/TSLA,
+    2026-05-22..2026-08-21) — real bars, short window, good for plumbing.
+ 4. yfinance (free): cached to ./data/{SYM}_{interval}.pkl; interval auto:
+    1h for intraday-ish (2y max), 1d fallback (works for gap_and_go).
+ 5. synthetic seeded random walk (zero-data smoke test).
+
+Env: QP_DB_PATH=/path/to/market.db to point at any quant-platform-format DB.
 """
 from __future__ import annotations
+import os
 import pathlib
+import sqlite3
 import numpy as np
 import pandas as pd
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
+FIXTURE_DB = pathlib.Path("/home/apharaohh/Projects/daytrading-agents/tests/fixtures/market.db")
 
-def load_bars(symbol: str, start=None, end=None) -> pd.DataFrame:
+def _from_sqlite(db: pathlib.Path, symbol: str) -> pd.DataFrame | None:
+    try:
+        c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        q = ("select ts, open, high, low, close, volume from intraday_bars "
+             "where symbol=? order by ts")
+        df = pd.read_sql_query(q, c, params=(symbol,))
+        c.close()
+    except Exception:
+        return None
+    if df.empty:
+        return None
+    df["ts"] = pd.to_datetime(df["ts"])
+    df = df.set_index("ts").sort_index()
+    df["vwap"] = (df["close"].rolling(6, min_periods=1).mean())
+    return df[["open", "high", "low", "close", "volume", "vwap"]]
+
+def _from_yfinance(symbol: str, interval: str = "1h") -> pd.DataFrame | None:
+    try:
+        import yfinance as yf
+    except ImportError:
+        return None
+    cache = DATA / f"{symbol}_{interval}.pkl"
+    if cache.exists():
+        try:
+            return pd.read_pickle(cache)
+        except Exception:
+            pass
+    try:
+        df = yf.download(symbol, period="2y" if interval == "1h" else "max",
+                         interval=interval, auto_adjust=True, progress=False)
+        if df is None or df.empty:
+            return None
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        df = df.rename(columns=str.lower)
+        df.index = pd.to_datetime(df.index)
+        if df.index.tz is not None:
+            df.index = df.index.tz_convert("America/New_York").tz_localize(None)
+        if "vwap" not in df.columns:
+            typ = (df["high"] + df["low"] + df["close"]) / 3
+            df["vwap"] = (typ * df["volume"]).rolling(6, min_periods=1).sum() / df["volume"].rolling(6, min_periods=1).sum()
+            df["vwap"] = df["vwap"].fillna(df["close"])
+        DATA.mkdir(parents=True, exist_ok=True)
+        df[["open", "high", "low", "close", "volume", "vwap"]].to_pickle(cache)
+        return df[["open", "high", "low", "close", "volume", "vwap"]]
+    except Exception:
+        return None
+
+def load_bars(symbol: str, start=None, end=None, source: str = "auto") -> tuple[pd.DataFrame, str]:
+    """Returns (bars, source_name). source_name in pkl/parquet/sqlite/yfinance1h/yfinance1d/synthetic."""
     pkl = DATA / f"{symbol}_1min.pkl"
     pq = DATA / f"{symbol}.parquet"
-    if pkl.exists():
-        df = pd.read_pickle(pkl)
-        df = df.tz_convert("America/New_York") if hasattr(df.index, "tz_convert") and df.index.tz is not None else df
-        if start: df = df[df.index.date >= start] if hasattr(start, "year") else df
-        return df
-    if pq.exists():
+    if source in ("auto", "pkl") and pkl.exists():
+        return pd.read_pickle(pkl), "pkl"
+    if source in ("auto", "parquet") and pq.exists():
         df = pd.read_parquet(pq)
         if "ts" in df.columns:
             df = df.set_index("ts").sort_index()
-        return df
-    return synthetic(symbol)
+        return df, "parquet"
+    if source in ("auto", "sqlite"):
+        for cand in [DATA / "market.db",
+                     pathlib.Path(os.environ["QP_DB_PATH"]) if os.environ.get("QP_DB_PATH") else None,
+                     FIXTURE_DB]:
+            if cand is not None and pathlib.Path(cand).exists():
+                df = _from_sqlite(pathlib.Path(cand), symbol)
+                if df is not None:
+                    return df, f"sqlite:{cand.name}"
+    if source in ("auto", "yfinance", "yfinance1h"):
+        df = _from_yfinance(symbol, "1h")
+        if df is not None:
+            return df, "yfinance1h"
+    if source in ("auto", "yfinance", "yfinance1d"):
+        df = _from_yfinance(symbol, "1d")
+        if df is not None:
+            return df, "yfinance1d"
+    return synthetic(symbol), "synthetic"
+
+def available_sources() -> dict:
+    out = {"pkl": sorted(p.name for p in DATA.glob("*_1min.pkl")),
+           "parquet": sorted(p.name for p in DATA.glob("*.parquet")),
+           "sqlite": [], "yfinance_cache": sorted(p.name for p in DATA.glob("*_1*.pkl"))}
+    for cand in [DATA / "market.db", FIXTURE_DB]:
+        if cand.exists():
+            try:
+                c = sqlite3.connect(f"file:{cand}?mode=ro", uri=True)
+                syms = [r[0] for r in c.execute("select distinct symbol from intraday_bars")]
+                c.close()
+                out["sqlite"].append(f"{cand}: {syms}")
+            except Exception as e:
+                out["sqlite"].append(f"{cand}: err {e}")
+    return out
 
 def synthetic(symbol: str, days: int = 252, seed: int = 7) -> pd.DataFrame:
-    """1-min bars, 390/day, zero-edge random walk — harness must report NO-GO on this."""
+    """1-min bars, 390/day, zero-edge random walk + overnight gaps."""
     rng = np.random.default_rng(seed + abs(hash(symbol)) % 10_000)
     idx = pd.date_range("2024-01-02", periods=days * 390, freq="min")
-    # keep only 09:30-16:00 ET approx: simulate day blocks
     rets = rng.normal(0, 0.00012, len(idx))
-    # inject overnight gaps every 390 bars so gap_and_go fires sometimes
     gaps = rng.normal(0, 0.0015, days)
     for d, g in enumerate(gaps):
         rets[d * 390] += g
