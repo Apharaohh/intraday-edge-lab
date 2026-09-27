@@ -1,6 +1,8 @@
 __pycache__/
 .venv/
 *.pyc
+.env
+.schwab_token.json
 store/
 data/*.pkl
 data/*.parquet
