@@ -53,7 +53,8 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
     day_opens = opens[starts]
     day_closes = closes[ends]
     if len(day_opens) > 2:
-        sigma = float(np.mean(np.abs(day_closes[1:15] / day_opens[:14] - 1))) if len(day_opens) >= 3 else 0.002
+        k = min(len(day_opens) - 1, 14)
+        sigma = float(np.mean(np.abs(day_closes[1:k + 1] / day_opens[:k] - 1)))
     else:
         sigma = 0.002
 

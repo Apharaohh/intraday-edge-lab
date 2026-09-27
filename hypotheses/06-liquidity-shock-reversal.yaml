@@ -1,0 +1,93 @@
+# 06 — Liquidity-shock reversal (1-min). PRE-REGISTERED, BLOCKED.
+#
+# Status: BLOCKED_NEEDS_TAQ — do NOT run for P&L on 1-min OHLC trade bars.
+# This file locks the exact test so a later TAQ/OPRA run is falsifiable.
+# Any run on trade-bar closes is signal-count only (see scripts/shock_signal_count.py)
+# and must never print expectancy, Sharpe, or a GO/NO-GO verdict.
+status: BLOCKED_NEEDS_TAQ
+name: liquidity-shock-reversal-1m
+thesis: Sharp stock-specific 1-min selloffs in liquid NDX names briefly overshoot, then rebound.
+reference: Nasdaq-100 extreme 1-min declines reversed ~31% next minute on midquote (pattern only, not executable edge).
+
+universe:
+  selection: At each month-end, 50 highest-dollar-volume Nasdaq-100 common stocks on preceding 20 trading days. Freeze for next month.
+  membership: historical, never today's list projected backward.
+  eligibility:
+    prior_close_min: 20.0
+    prior_20d_median_daily_dollar_volume_min: 100_000_000
+  session: regular only; no new position on earnings-announcement session, halt session, or first regular session after earnings.
+
+signal_1m:
+  clock: end of minute t, signals 10:00-14:30 ET only
+  midquote_return_max: -0.006        # <= -0.60%
+  sigma_rule: return_t <= -3 * std(same clock-minute 1m midquote returns, prior 20 sessions)
+  volume_rule: shares_t >= 3 * median(same clock-minute shares, prior 20 sessions)
+  idiosyncratic:
+    stock_minus_qqq_max_pp: -0.40    # underperform QQQ by >= 0.40pp over minute t
+    qqq_return_floor: -0.003         # QQQ own return > -0.30%
+  tradability:
+    nbbo_valid_required: true
+    spread_max_pct_mid: 0.001        # <= 0.10% of midquote
+    skip_locked_crossed_halted: true
+
+entry:
+  timing: first valid quote AFTER minute t ends
+  order: marketable buy limit capped at ask + 0.0005 * price
+  cancel_unfilled_after_s: 5
+  assume_unfilled_traded: false      # never
+
+exits:
+  stop_pct_below_fill: 0.005         # sell stop, triggered order NOT guaranteed fill
+  target_pct_above_fill: 0.004       # sell limit; cancel other on fill
+  time_exit_min: 3                   # else exit at first executable quote 3 min after entry
+  eod_flatten_et: "15:50"
+
+risk:
+  max_one_attempt_per_stock_per_day: true
+  max_filled_trades_portfolio_per_day: 3
+  risk_per_trade_max_pct_equity: 0.001   # 0.10% on 0.50% stop
+  position_cap_pct_equity: 0.05
+  halt_day_after_realized_loss_pct: 0.005
+
+options_stage2_only_if_stock_passes:
+  enabled: false                      # stage 2, separate ledger, not this file's verdict
+  dte_days: [14, 35]
+  delta_range: [0.55, 0.70]
+  delta_target: 0.60
+  filters: {bid_min: 2.0, width_max_pct_mid: 0.05, open_interest_min: 100}
+  no_0dte: true
+  order: marketable limit <= ask, cancel after 5s
+  size_premium_max_pct_equity: 0.001
+  exit: when underlying stop/target/time triggers, at option executable bid (never theo value)
+  forbid_independent_pct_target: true
+
+data_required_for_verdict:
+  - timestamped stock trades + NBBO quotes (TAQ-level)
+  - synced QQQ quotes, corporate actions, earnings timestamps, halt flags
+  - option-chain NBBOs with availability (stage 2 only)
+  - signals from info at minute-t close only; orders processed on later events
+  - costs: commissions, regulatory fees, partial fills, cancellations, adverse stop slippage
+  - second harsher case: +0.05% stock-price slippage on EACH stock-side fill
+  - note: 1-min OHLC alone cannot establish fills
+
+splits:
+  development: "2019-2022"
+  validation_locked: "2023-2024"
+  out_of_sample_untouched: "2025-latest complete month"
+  rule: causal-only rolling stats; keep chronological roles if span incomplete
+
+baselines:
+  - buy every qualifying -0.60% shock without idiosyncratic/volume filters
+  - same entry delayed one minute
+  - report signal-to-fill delay + fraction of signals filled
+
+pass_fail_preregistered:
+  require_all:
+    - positive net expectancy in untouched period AND in harsher-cost case
+    - positive in >= 2 calendar years and broad set of stocks
+    - no single stock > 25% of net profit
+  report: [trade_count, avg_net_dollars, avg_net_bp, fill_rate, worst_day, max_drawdown, CI_clustered_by_day]
+  on_fail: REJECT, no shock-threshold tuning
+
+costs_note: current lab cost ladder (bp/side) is INSUFFICIENT for this test; verdict requires full fee/slippage event model above.
+margin_note: FINRA intraday margin transition began 2026-06-04 through 2027-10-20; check broker's implemented rules before any live thought.

@@ -6,6 +6,15 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HYP = ROOT / "hypotheses"
 
+def _load_cfg(path: pathlib.Path) -> dict | None:
+    """None if BLOCKED (prints reason) — these must never produce P&L/verdicts."""
+    cfg = yaml.safe_load(path.read_text())
+    status = str(cfg.get("status", ""))
+    if status.startswith("BLOCKED"):
+        print(f"{path.name}: skipped ({status})")
+        return None
+    return cfg
+
 def cmd_list(_a):
     for p in sorted(HYP.glob("*.yaml")):
         if p.name.startswith("00-"):
@@ -22,6 +31,9 @@ def cmd_run(a):
     from .backtest import run
     from .evaluate import evaluate, findings_md
     cfg = yaml.safe_load(pathlib.Path(a.hyp).read_text())
+    if str(cfg.get("status", "")).startswith("BLOCKED"):
+        print(f"{pathlib.Path(a.hyp).name}: BLOCKED ({cfg['status']}) — refusing P&L run.")
+        return
     syms = a.symbols.split(",") if a.symbols else cfg.get("universe", ["SPY"])
     base_params = dict(cfg.get("params", {}))
     filt = dict(cfg.get("filters", {}))
@@ -67,6 +79,10 @@ def cmd_run(a):
 def cmd_scan(a):
     for p in sorted(HYP.glob("*.yaml")):
         if p.name.startswith("00-"):
+            continue
+        cfg = yaml.safe_load(p.read_text())
+        if str(cfg.get("status", "")).startswith("BLOCKED"):
+            print(f"=== {p.name} === skipped ({cfg['status']})")
             continue
         print(f"=== {p.name} ===")
         cmd_run(type("A", (), {"hyp": str(p), "symbols": a.symbols, "synthetic": a.synthetic,

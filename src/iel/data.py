@@ -6,8 +6,8 @@ Priority:
  3. SQLite intraday_bars: ./data/market.db, $QP_DB_PATH, then the
     daytrading-agents test fixture (5-min, SPY/AAPL/MSFT/NVDA/AMD/TSLA,
     2026-05-22..2026-08-21) — real bars, short window, good for plumbing.
- 4. yfinance (free): cached to ./data/{SYM}_{interval}.pkl; interval auto:
-    1h for intraday-ish (2y max), 1d fallback (works for gap_and_go).
+ 4. yfinance (free): cached to ./data/{SYM}_{interval}.pkl; 1m = last 7d
+    (true 1-min, runnable now, no creds), 1h = 2y, 1d fallback.
  5. synthetic seeded random walk (zero-data smoke test).
 
 Env: QP_DB_PATH=/path/to/market.db to point at any quant-platform-format DB.
@@ -50,8 +50,9 @@ def _from_yfinance(symbol: str, interval: str = "1h") -> pd.DataFrame | None:
             return pd.read_pickle(cache)
         except Exception:
             pass
+    period = {"1m": "7d", "1h": "2y"}.get(interval, "max")
     try:
-        df = yf.download(symbol, period="2y" if interval == "1h" else "max",
+        df = yf.download(symbol, period=period,
                          interval=interval, auto_adjust=True, progress=False)
         if df is None or df.empty:
             return None
@@ -72,7 +73,7 @@ def _from_yfinance(symbol: str, interval: str = "1h") -> pd.DataFrame | None:
         return None
 
 def load_bars(symbol: str, start=None, end=None, source: str = "auto") -> tuple[pd.DataFrame, str]:
-    """Returns (bars, source_name). source_name in pkl/parquet/sqlite/yfinance1h/yfinance1d/synthetic."""
+    """Returns (bars, source_name). source_name in pkl/parquet/sqlite/yfinance1m/yfinance1h/yfinance1d/synthetic."""
     pkl = DATA / f"{symbol}_1min.pkl"
     pq = DATA / f"{symbol}.parquet"
     if source in ("auto", "pkl") and pkl.exists():
@@ -90,6 +91,12 @@ def load_bars(symbol: str, start=None, end=None, source: str = "auto") -> tuple[
                 df = _from_sqlite(pathlib.Path(cand), symbol)
                 if df is not None:
                     return df, f"sqlite:{cand.name}"
+    # NB: 1m (7d window) only on explicit request — too short for splits;
+    # auto prefers the 2y hourly series so verdicts stay time-split.
+    if source in ("yfinance1m",):
+        df = _from_yfinance(symbol, "1m")
+        if df is not None and len(df) > 100:
+            return df, "yfinance1m"
     if source in ("auto", "yfinance", "yfinance1h"):
         df = _from_yfinance(symbol, "1h")
         if df is not None:
