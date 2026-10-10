@@ -1,7 +1,7 @@
 # Copy to NN-name.yaml, fill in, commit BEFORE running (pre-registration).
 name: template
 thesis: one sentence why this should work
-entry: orb_breakout   # one of orb_breakout|vwap_reclaim|gap_and_go|late_reversal|noise_momentum
+entry: orb_breakout   # one of orb_breakout|vwap_reclaim|gap_and_go|late_reversal|noise_momentum|levels_rvol
 params: {stop_R: 1.0, target_R: 1.5, time_stop: 10}
 universe: [SPY, QQQ, IWM]
 costs_bp_side: [0.0, 0.5, 1.0, 2.0]

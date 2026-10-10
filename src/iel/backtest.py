@@ -101,6 +101,25 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
     bars_held = 0
     n = len(df)
     day_open = opens[0]
+    # levels_rvol context: all arrays causal per element (prior sessions,
+    # cumulative-to-i, trailing-only). Built once; entry fn reads ctx[i].
+    ctx = None
+    if entry == "levels_rvol":
+        from .library import _prior_day_levels, _session_vwap, _wilder_atr, _ema
+        from .rvol import compute_rvol
+        vols = df["volume"].to_numpy() if "volume" in df.columns else np.ones(len(df))
+        pdh, pdl, pdc = _prior_day_levels(highs, lows, closes, day_id)
+        ctx = {
+            "pdh": pdh,
+            "pdl": pdl,
+            "pdc": pdc,
+            "vwap": _session_vwap(highs, lows, closes, vols, day_id),
+            "atr": _wilder_atr(highs, lows, closes, int(params.get("atr_len", 14))),
+            "ema": _ema(closes, int(params.get("htf_ema_span", 20))),
+            "rvol": compute_rvol(vols, day_id,
+                                 baseline_sessions=int(params.get("rvol_baseline", 20))),
+            "volume": vols,
+        }
     for i in range(n - 1):
         ds = int(day_start_of[i])
         de = int(ds + int(day_len_of[i]) - 1)
@@ -136,6 +155,8 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
                 sig = fn(opens, closes, i, params, S)
             elif entry == "late_reversal":
                 sig = fn(closes, i, params, S)
+            elif entry == "levels_rvol":
+                sig = fn(closes, highs, lows, opens, i, params, S, ctx)
             else:
                 sig = 0
             # enter at next open only if next bar is same session

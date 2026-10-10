@@ -1,0 +1,8 @@
+name: levels-rvol-breakout-fade
+thesis: "Port of TradingView Intraday Levels+RVOL (frozen Pine defaults): level-breakouts in high-RVOL regimes and Camarilla/pivot fades in low-RVOL regimes, VWAP+HTF filtered, 2R bracket, flat EOD."
+entry: levels_rvol
+params: {stop_R: 1.0, target_R: 2.0, time_stop: 390, rvol_baseline: 20, rvol_elevated: 1.5, rvol_low: 0.8, atr_len: 14, barvol_lookback: 20, barvol_mult: 1.0, fade_vwap_atr_band: 0.5, htf_ema_span: 20}
+universe: [SPY, QQQ, IWM]
+costs_bp_side: [0.0, 0.5, 1.0, 2.0]
+gates: {min_n: 30, min_sharpe_1bp: 0.5, min_breakeven_bp: 1.5}
+frozen_notes: "Pine defaults mapped 1:1 (RVOL 1.5/0.8 base-20, ATR14 x1.0, 2R, SMA20 x1.0 bar confirm, 0.5-ATR VWAP band, EMA20 HTF). Deviations: (1) premarket H/L dropped — harness data is RTH-only, breakout triggers are R1/R2/prior-high and S1/S2/prior-low; (2) risk unit is entry-bar range, not ATR — the 2:1 multiple is preserved, not the absolute distance; (3) time_stop=390 (full session) stands in for Pine's absent time stop — exits are stop/target/EOD only; (4) HTF EMA20 runs on the traded timeframe — exact on 1h data, shorter-horizon proxy on 1-min; (5) Pine flaws replicated as designed, including flat-20-bar volume SMA and symmetric shorts."
