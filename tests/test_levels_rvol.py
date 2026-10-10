@@ -55,3 +55,8 @@ def test_helpers_causal_shapes():
 
 def test_registered():
     assert "levels_rvol" in ENTRYFNS
+
+def test_leg_domain():
+    df = _two_days()
+    tr = run(df, "levels_rvol", {"time_stop": 390})
+    assert tr.empty or set(tr["leg"].unique()) <= {"breakout", "fade"}

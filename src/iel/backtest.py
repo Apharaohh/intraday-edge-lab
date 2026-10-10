@@ -99,6 +99,7 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
     entry_px = 0.0
     risk = 0.0
     bars_held = 0
+    entry_leg = ""
     n = len(df)
     day_open = opens[0]
     # levels_rvol context: all arrays causal per element (prior sessions,
@@ -119,6 +120,7 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
             "rvol": compute_rvol(vols, day_id,
                                  baseline_sessions=int(params.get("rvol_baseline", 20))),
             "volume": vols,
+            "diag": {},
         }
     for i in range(n - 1):
         ds = int(day_start_of[i])
@@ -142,7 +144,8 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
                 fill = opens[i + 1] if i + 1 < n and not last_today else px
                 ret = (fill / entry_px - 1) * pos
                 rows.append({"idx": i, "day": str(idx[i].date()), "side": pos, "gross": ret,
-                             "sides": 2.0, "exit": exit_ or "eod", "held": bars_held})
+                             "sides": 2.0, "exit": exit_ or "eod", "held": bars_held,
+                             "leg": entry_leg})
                 pos, bars_held = 0, 0
         if pos == 0:
             if entry == "noise_momentum":
@@ -171,6 +174,8 @@ def run(df: pd.DataFrame, entry: str, params: dict | None = None) -> pd.DataFram
                 else:
                     pos = sig
                     entry_px = opens[i + 1]
+                    entry_leg = (ctx.get("diag", {}).pop("leg", "") if ctx is not None
+                                 else "")
                     bar_range = max(highs[i] - lows[i], entry_px * 1e-4)
                     risk = bar_range / entry_px
                     bars_held = 0

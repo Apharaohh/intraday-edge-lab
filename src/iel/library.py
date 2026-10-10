@@ -211,15 +211,19 @@ def levels_rvol(closes, highs, lows, opens, i: int, p: dict, S: dict, ctx: dict)
 
     if rvol_hi and bar_vol_ok:
         if trend_long and (cross_up(r1) or cross_up(r2) or cross_up(pdh)):
+            ctx.get("diag", {})["leg"] = "breakout"
             return 1
         if trend_short and (cross_dn(s1) or cross_dn(s2) or cross_dn(pdl)):
+            ctx.get("diag", {})["leg"] = "breakout"
             return -1
     if rvol_lo and bar_vol_ok and fade_ok:
         if any(h > lvl and c < lvl for lvl in (cam_r4, cam_r3, r3, r2)
                if np.isfinite(lvl)):
+            ctx.get("diag", {})["leg"] = "fade"
             return -1
         if any(low < lvl and c > lvl for lvl in (cam_s4, cam_s3, s3, s2)
                if np.isfinite(lvl)):
+            ctx.get("diag", {})["leg"] = "fade"
             return 1
     return 0
 
