@@ -25,3 +25,17 @@ on index ETFs, or is every edge a timeframe artifact?
 - Any best-cell claim is trial-counted at **N=60** (DSR bar ≈ unreachable
   by construction at this N — stated so nobody tries).
 - Excluded: levels_rvol (under judgment in 09 — stays out of the grid).
+
+## LONGDATA extension (pre-registered 2026-10-10 — runs after commit)
+
+Same grid on the longest intraday stitched per symbol: 5min-lab 2020 +
+2022 slices (Alpaca) merged with QP 5-min (2021-07+, dedup keep-QP),
+session VWAP recomputed on the merged frame. SPY/QQQ gain the COVID
+crash + 2022 bear; IWM gains 2022 (no 2020 slice exists).
+- 09-levels-rvol included in the rerun, reported separately (already judged).
+- Disclosed discontinuities: volume feed may differ across sources
+  (SIP vs IEX); RVOL's trailing-20 baseline adapts within ~20 sessions of
+  a boundary. Timestamps unified to tz-naive ET.
+- Reading rules: same gates; this tests regime-stability (crash + bear),
+  promotes nothing. A cell green on 2021+ but red on 2020-22 is
+  regime-specific by construction.
