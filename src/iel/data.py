@@ -140,3 +140,48 @@ def synthetic(symbol: str, days: int = 252, seed: int = 7) -> pd.DataFrame:
     }, index=idx)
     df["vwap"] = df["close"].rolling(30, min_periods=1).mean()
     return df
+
+
+def resample(df: pd.DataFrame, minutes: int) -> pd.DataFrame:
+    """Aggregate intraday bars to N-minute bars, anchored at 09:30 ET.
+
+    Bins are clock-stable (09:30, 09:30+N, ...) per session; short sessions
+    yield fewer bins. OHLCV aggregates exactly (open-first, high-max,
+    low-min, close-last, volume-sum) and session VWAP is recomputed
+    cumulatively on the resampled bars. Each output bar derives only from
+    its constituent input bars (no lookahead); output timestamps are the
+    bins' opening times.
+    """
+    if minutes <= 0:
+        raise ValueError(f"minutes must be positive, got {minutes}")
+    idx = pd.to_datetime(df.index)
+    day = idx.normalize()
+    anchor = day + pd.to_timedelta("9:30:00")
+    slot = ((idx - anchor).total_seconds() // 60 // minutes).astype(int)
+    keys = list(zip(day, slot))
+    order: dict = {}
+    groups: dict = {}
+    for k, (_, row) in zip(keys, df.iterrows()):
+        if k not in groups:
+            groups[k] = []
+            order[k] = len(order)
+        groups[k].append(row)
+    rows = []
+    for k in sorted(groups, key=order.get):
+        g = groups[k]
+        ts = pd.Timestamp(k[0]) + pd.Timedelta(minutes=int(k[1]) * minutes) + pd.Timedelta("9:30:00")
+        rows.append({
+            "ts": ts,
+            "open": float(g[0]["open"]),
+            "high": float(max(r["high"] for r in g)),
+            "low": float(min(r["low"] for r in g)),
+            "close": float(g[-1]["close"]),
+            "volume": float(sum(r["volume"] for r in g)),
+        })
+    out = pd.DataFrame(rows).set_index("ts").sort_index()
+    typ = (out["high"] + out["low"] + out["close"]) / 3.0
+    pv = (typ * out["volume"]).groupby(out.index.normalize()).cumsum()
+    cv = out["volume"].groupby(out.index.normalize()).cumsum()
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out["vwap"] = (pv / cv).where(cv > 0, out["close"])
+    return out[["open", "high", "low", "close", "volume", "vwap"]]

@@ -57,6 +57,10 @@ def cmd_run(a):
             df, src = synthetic(s), "synthetic(forced)"
         else:
             df, src = load_bars(s, source=a.source)
+        if getattr(a, "timeframe", None):
+            from .data import resample
+            df = resample(df, int(a.timeframe))
+            src = f"{src}/{a.timeframe}m"
         tr = run(df, cfg["entry"], params)
         r = evaluate(tr, s)
         r["data_source"] = src
@@ -92,7 +96,8 @@ def cmd_scan(a):
             continue
         print(f"=== {p.name} ===")
         cmd_run(type("A", (), {"hyp": str(p), "symbols": a.symbols, "synthetic": a.synthetic,
-                               "source": a.source, "out": None, "rvol_min": a.rvol_min,
+                               "source": a.source, "out": None, "timeframe": a.timeframe,
+                               "rvol_min": a.rvol_min,
                                "rvol_max": a.rvol_max, "price_min": a.price_min,
                                "day_rvol_min": a.day_rvol_min, "day_rvol_max": a.day_rvol_max})())
 
@@ -103,12 +108,13 @@ def main():
     sub.add_parser("sources")
     r = sub.add_parser("run"); r.add_argument("hyp"); r.add_argument("--symbols", default=None)
     r.add_argument("--synthetic", action="store_true"); r.add_argument("--out", default=None)
-    r.add_argument("--source", default="auto")
+    r.add_argument("--source", default="auto"); r.add_argument("--timeframe", type=int, default=None)
     r.add_argument("--rvol-min", type=float, default=None); r.add_argument("--rvol-max", type=float, default=None)
     r.add_argument("--price-min", type=float, default=None)
     r.add_argument("--day-rvol-min", type=float, default=None); r.add_argument("--day-rvol-max", type=float, default=None)
     s = sub.add_parser("scan"); s.add_argument("--symbols", default=None)
     s.add_argument("--synthetic", action="store_true"); s.add_argument("--source", default="auto")
+    s.add_argument("--timeframe", type=int, default=None)
     s.add_argument("--rvol-min", type=float, default=None); s.add_argument("--rvol-max", type=float, default=None)
     s.add_argument("--price-min", type=float, default=None)
     s.add_argument("--day-rvol-min", type=float, default=None); s.add_argument("--day-rvol-max", type=float, default=None)
