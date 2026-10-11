@@ -81,10 +81,12 @@ def verdict_line(tr, sym, tag):
           flush=True)
 
 
-hyps = {}
-for p in sorted(__import__("pathlib").Path("hypotheses").glob("0[1-57]-*.yaml")):
+hyps = []
+for p in sorted(__import__("pathlib").Path("hypotheses").glob("0[1-8]-*.yaml")):
     cfg = yaml.safe_load(p.read_text())
-    hyps[cfg["entry"]] = dict(cfg.get("params", {}))
+    params = dict(cfg.get("params", {}))
+    params.update(cfg.get("filters", {}))
+    hyps.append((p.stem, cfg["entry"], params))
 
 for sym in SYMS:
     print(f"===== {sym} (stitched) =====", flush=True)
@@ -92,9 +94,9 @@ for sym in SYMS:
     print(f"bars={len(base)} {base.index.min()} -> {base.index.max()}", flush=True)
     for tf in TFS:
         df = base if tf == 5 else resample(base, tf)
-        for entry in ENTRIES:
-            tr = run(df, entry, hyps[entry])
-            verdict_line(tr, f"{sym}/{tf}m", entry)
+        for name, entry, params in hyps:
+            tr = run(df, entry, params)
+            verdict_line(tr, f"{sym}/{tf}m", f"{name}:{entry}")
     tr = run(base, "levels_rvol",
              yaml.safe_load(__import__("pathlib").Path("hypotheses/09-levels-rvol.yaml").read_text()).get("params", {}))
     verdict_line(tr, f"{sym}/5m", "levels_rvol[09]")
