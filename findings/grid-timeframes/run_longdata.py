@@ -82,8 +82,10 @@ def verdict_line(tr, sym, tag):
 
 
 hyps = []
-for p in sorted(__import__("pathlib").Path("hypotheses").glob("0[1-8]-*.yaml")):
+for p in sorted(__import__("pathlib").Path("hypotheses").glob("0[1-578]-*.yaml")):
     cfg = yaml.safe_load(p.read_text())
+    if str(cfg.get("status", "")).startswith("BLOCKED"):
+        continue
     params = dict(cfg.get("params", {}))
     params.update(cfg.get("filters", {}))
     hyps.append((p.stem, cfg["entry"], params))
